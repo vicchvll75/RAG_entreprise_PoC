@@ -1,0 +1,9 @@
+.venv
+.env
+.git
+data
+eval/results
+graphify-out
+corpus/graphify-out
+**/__pycache__
+.pytest_cache

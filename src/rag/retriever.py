@@ -56,6 +56,23 @@ def build_index(embedder: Embedder, settings: Settings | None = None,
     return len(chunks)
 
 
+def ensure_index(embedder: Embedder, settings: Settings | None = None) -> None:
+    """Construit l'index s'il manque ou s'il a été fait avec un autre embedder.
+
+    Sur un hébergement au disque éphémère (Hugging Face Spaces), l'index est reconstruit à
+    chaque démarrage : 15 documents, un seul appel d'embeddings.
+    """
+    settings = settings or get_settings()
+    client = get_client(settings)
+    try:
+        collection = client.get_collection(settings.collection_name)
+        if (collection.metadata or {}).get("embedder") == embedder.name:
+            return
+    except Exception:
+        pass
+    build_index(embedder, settings, client)
+
+
 def tokenize(text: str) -> list[str]:
     text = unicodedata.normalize("NFKD", text.lower())
     text = "".join(ch for ch in text if not unicodedata.combining(ch))

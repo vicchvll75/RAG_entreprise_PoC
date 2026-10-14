@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     candidates_per_retriever: int = 20
     faithfulness_guardrail: bool = False
     faithfulness_threshold: float = 0.7
+    rate_limit_per_10min: int = 20
 
     @property
     def provider(self) -> dict:

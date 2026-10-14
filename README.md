@@ -34,10 +34,26 @@ divulguer », ne suffit pas.
 pip install -r requirements.txt
 cp .env.example .env            # renseigner MISTRAL_API_KEY
 python scripts/ingest.py        # construit l'index Chroma
-uvicorn rag.api:app --app-dir src
-curl -X POST localhost:8000/ask -H "X-User-Role: employee" \
-     -H "Content-Type: application/json" -d '{"question": "Combien de jours de télétravail ?"}'
+uvicorn rag.api:app --app-dir src  # interface sur http://localhost:8000
 ```
+
+L'index est aussi construit automatiquement au démarrage de l'API s'il manque.
+
+## Déploiement (Hugging Face Spaces + GitHub Actions)
+
+```
+push sur main ──► CI : pytest ──► éval retrieval (quality gate)
+             └──► déploiement : instantané du code poussé vers le Space (Docker)
+```
+
+- `Dockerfile` : image servie sur le port 7860 ; l'index Chroma est reconstruit à chaque
+  démarrage (disque éphémère, 15 documents, un seul appel d'embeddings).
+- `.github/workflows/ci.yml` : tests à chaque push ; évaluation du retrieval si le secret
+  `MISTRAL_API_KEY` existe ; évaluation Ragas complète à la demande (*Run workflow*).
+- `.github/workflows/deploy-hf.yml` : pousse le code vers le Space si le secret `HF_TOKEN` et
+  la variable `HF_SPACE` sont configurés.
+- L'endpoint public est limité par IP (`RATE_LIMIT_PER_10MIN`) et les questions à 500
+  caractères, car chaque requête consomme des crédits LLM.
 
 ## Évaluation
 

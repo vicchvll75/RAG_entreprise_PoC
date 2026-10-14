@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altiscope RAG</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1a1d23; --muted: #626a77; --border: #dde1e7;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --ok: #1e7a4c; --ok-soft: #e3f4ea;
+    --warn: #9a5b00; --warn-soft: #fbf0dc; --danger: #b42323; --danger-soft: #fbe5e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111318; --card: #1a1d24; --text: #e6e8ec; --muted: #9aa2af; --border: #2c313b;
+      --accent: #7c9cf5; --accent-soft: #232c45; --ok: #5cc98f; --ok-soft: #173326;
+      --warn: #e8b056; --warn-soft: #3a2c14; --danger: #f07a7a; --danger-soft: #3d1c1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 18px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  .roles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .roles button { border: 1px solid var(--border); background: transparent; color: var(--text);
+                  border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+  .roles button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--border);
+             border-radius: 8px; padding: 10px; font: inherit; background: var(--bg); color: var(--text); }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .primary { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+             padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary:disabled { opacity: .55; cursor: wait; }
+  .examples { display: grid; gap: 6px; }
+  .examples button { text-align: left; border: 1px solid var(--border); background: transparent;
+                     color: var(--text); border-radius: 8px; padding: 8px 10px; cursor: pointer; font: inherit; font-size: 14px; }
+  .examples button:hover { border-color: var(--accent); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 4px;
+         padding: 1px 7px; margin-right: 6px; }
+  .t-answerable { background: var(--ok-soft); color: var(--ok); }
+  .t-forbidden { background: var(--danger-soft); color: var(--danger); }
+  .t-unanswerable { background: var(--warn-soft); color: var(--warn); }
+  .t-role { background: var(--accent-soft); color: var(--accent); }
+  #answer { white-space: pre-wrap; margin: 10px 0 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 13px;
+          border-top: 1px solid var(--border); margin-top: 14px; padding-top: 10px; }
+  .error { color: var(--danger); }
+  [hidden] { display: none !important; }
+  footer { color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Assistant documentaire Altiscope</h1>
+  <p class="sub">RAG avec contrôle d'accès par rôle : changez de rôle et reposez la même question
+    pour voir ce que chaque profil peut obtenir. Entreprise et documents fictifs.</p>
+
+  <section class="card">
+    <label>Vous êtes connecté en tant que</label>
+    <div class="roles" id="roles" role="group" aria-label="Rôle"></div>
+    <label for="q">Question</label>
+    <textarea id="q" maxlength="500" placeholder="Ex. : combien de jours de télétravail par semaine ?"></textarea>
+    <div class="row">
+      <span class="hint">Ctrl + Entrée pour envoyer</span>
+      <button class="primary" id="send">Demander</button>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <div id="status"></div>
+    <p id="answer"></p>
+    <div class="meta" id="meta"></div>
+  </section>
+
+  <section class="card">
+    <label>Exemples du jeu d'évaluation</label>
+    <div class="examples" id="examples"></div>
+  </section>
+
+  <footer>Recherche hybride (embeddings + BM25) pré-filtrée par rôle, génération Mistral, garde-fous
+    de sortie et évaluation Ragas. Code : <a href="https://github.com/vicchvll75/RAG_entreprise_PoC">GitHub</a>.</footer>
+</main>
+<script>
+const ROLES = { employee: "Employé", engineering: "Engineering", hr: "RH", finance: "Finance", executive: "Comité exécutif" };
+const TYPES = { answerable: "répondable", forbidden: "interdit au rôle", unanswerable: "hors corpus" };
+const REASONS = { canary_leak: "fuite détectée (code canari)", invalid_citation: "citation d'un document non fourni",
+                  low_faithfulness: "fidélité insuffisante", no_context: "aucun document accessible" };
+let role = "employee";
+const $ = (id) => document.getElementById(id);
+
+function renderRoles() {
+  $("roles").innerHTML = "";
+  for (const [key, label] of Object.entries(ROLES)) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.setAttribute("aria-pressed", key === role);
+    b.onclick = () => { role = key; renderRoles(); };
+    $("roles").append(b);
+  }
+}
+
+function tag(text, cls) {
+  const s = document.createElement("span");
+  s.className = "tag " + cls; s.textContent = text; return s;
+}
+
+async function ask() {
+  const question = $("q").value.trim();
+  if (question.length < 3) return;
+  $("send").disabled = true; $("send").textContent = "…";
+  $("result").hidden = false; $("status").innerHTML = ""; $("meta").innerHTML = "";
+  $("answer").className = ""; $("answer").textContent = "Recherche dans les documents autorisés…";
+  try {
+    const r = await fetch("ask", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-User-Role": role },
+      body: JSON.stringify({ question }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Requête invalide");
+    $("status").append(tag(ROLES[role], "t-role"),
+      data.refused ? tag("refus", "t-unanswerable") : tag("réponse", "t-answerable"));
+    if (data.guardrails.reason) $("status").append(tag("garde-fou : " + (REASONS[data.guardrails.reason] || data.guardrails.reason), "t-forbidden"));
+    $("answer").textContent = data.answer;
+    const meta = [`Documents consultés : ${data.sources.join(", ") || "aucun"}`, `${data.latency_ms} ms`];
+    if (data.usage.prompt_tokens) meta.push(`${data.usage.prompt_tokens + data.usage.completion_tokens} tokens`);
+    for (const m of meta) { const s = document.createElement("span"); s.textContent = m; $("meta").append(s); }
+  } catch (e) {
+    $("answer").className = "error"; $("answer").textContent = e.message;
+  } finally {
+    $("send").disabled = false; $("send").textContent = "Demander";
+  }
+}
+
+async function loadExamples() {
+  const items = await (await fetch("examples")).json();
+  for (const it of items) {
+    const b = document.createElement("button");
+    b.append(tag(ROLES[it.role], "t-role"), tag(TYPES[it.type], "t-" + it.type), it.question);
+    b.onclick = () => { role = it.role; renderRoles(); $("q").value = it.question; ask(); };
+    $("examples").append(b);
+  }
+}
+
+$("send").onclick = ask;
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) ask(); });
+renderRoles();
+loadExamples();
+</script>
+</body>
+</html>
