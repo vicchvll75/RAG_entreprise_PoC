@@ -41,6 +41,9 @@ jobs:
       - name: Évaluation complète (Ragas)
         if: env.MISTRAL_API_KEY != '' && inputs.full_eval
         run: python eval/run_eval.py
+      - name: Afficher les rapports sur la page de l'exécution
+        if: always() && env.MISTRAL_API_KEY != ''
+        run: cat eval/results/*.md >> "$GITHUB_STEP_SUMMARY" || echo "Aucun rapport produit" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always() && env.MISTRAL_API_KEY != ''
         with:
