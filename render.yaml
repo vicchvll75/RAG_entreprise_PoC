@@ -1,0 +1,18 @@
+# Blueprint Render : service web Docker, offre gratuite.
+# Le déploiement n'a lieu que si la CI GitHub (tests + quality gate) est verte.
+services:
+  - type: web
+    name: rag-entreprise
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: LLM_PROVIDER
+        value: mistral
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: RATE_LIMIT_PER_10MIN
+        value: "20"

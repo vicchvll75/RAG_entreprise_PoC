@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Hugging Face Spaces exécute le conteneur avec l'UID 1000.
+# Utilisateur non root.
 RUN useradd -m -u 1000 user
 WORKDIR /home/user/app
 
@@ -12,6 +12,7 @@ COPY --chown=user corpus ./corpus
 COPY --chown=user eval ./eval
 
 # Disque éphémère : l'index est reconstruit au démarrage (voir ensure_index).
+# PORT est fourni par l'hébergeur (Render) ; 7860 par défaut.
 ENV PYTHONPATH=/home/user/app/src \
     CHROMA_DIR=/tmp/chroma \
     PORT=7860
