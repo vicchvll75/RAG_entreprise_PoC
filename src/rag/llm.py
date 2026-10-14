@@ -11,6 +11,10 @@ from openai import AsyncOpenAI, OpenAI
 
 from rag.config import Settings, get_settings
 
+# Les offres gratuites (Mistral « Experiment ») limitent à ~1 requête/s : le SDK réessaie les 429
+# avec une attente exponentielle. 2 tentatives par défaut ne suffisent pas à absorber une rafale.
+MAX_RETRIES = 6
+
 
 class Embedder(Protocol):
     name: str
@@ -20,7 +24,8 @@ class Embedder(Protocol):
 
 class ApiEmbedder:
     def __init__(self, settings: Settings):
-        self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url)
+        self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url,
+                             max_retries=MAX_RETRIES)
         self.model = settings.embed_model
         self.name = f"{settings.llm_provider}:{self.model}"
 
@@ -60,9 +65,9 @@ def get_embedder(settings: Settings | None = None) -> Embedder:
 @lru_cache
 def get_chat_client() -> OpenAI:
     s = get_settings()
-    return OpenAI(api_key=s.api_key, base_url=s.base_url)
+    return OpenAI(api_key=s.api_key, base_url=s.base_url, max_retries=MAX_RETRIES)
 
 
 def get_async_client() -> AsyncOpenAI:
     s = get_settings()
-    return AsyncOpenAI(api_key=s.api_key, base_url=s.base_url)
+    return AsyncOpenAI(api_key=s.api_key, base_url=s.base_url, max_retries=MAX_RETRIES)

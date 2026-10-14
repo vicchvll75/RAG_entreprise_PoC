@@ -87,7 +87,7 @@ def build_ragas_metrics(settings):
     }
 
 
-async def score_ragas(rows: list[dict], metrics: dict, concurrency: int = 4) -> None:
+async def score_ragas(rows: list[dict], metrics: dict, concurrency: int = 2) -> None:
     sem = asyncio.Semaphore(concurrency)
 
     async def run(row: dict, name: str, metric, **kwargs) -> None:
