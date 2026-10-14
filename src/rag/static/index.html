@@ -121,8 +121,10 @@ async function ask() {
     const r = await fetch("ask", { method: "POST",
       headers: { "Content-Type": "application/json", "X-User-Role": role },
       body: JSON.stringify({ question }) });
-    const data = await r.json();
-    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Requête invalide");
+    const raw = await r.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error(`Erreur serveur (${r.status})`); }
+    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Requête invalide (${r.status})`);
     $("status").append(tag(ROLES[role], "t-role"),
       data.refused ? tag("refus", "t-unanswerable") : tag("réponse", "t-answerable"));
     if (data.guardrails.reason) $("status").append(tag("garde-fou : " + (REASONS[data.guardrails.reason] || data.guardrails.reason), "t-forbidden"));

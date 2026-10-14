@@ -47,3 +47,16 @@ def test_question_length_is_bounded(client):
 
 def test_rate_limit(client):
     assert [ask(client).status_code for _ in range(4)] == [200, 200, 200, 429]
+
+
+def test_llm_provider_error_returns_readable_json(client, monkeypatch):
+    import httpx
+    from openai import AuthenticationError
+
+    def boom(*_, **__):
+        req = httpx.Request("POST", "https://api.mistral.ai/v1/chat/completions")
+        raise AuthenticationError("bad key", response=httpx.Response(401, request=req), body=None)
+
+    monkeypatch.setattr(api.state["pipeline"], "ask", boom)
+    r = ask(client)
+    assert r.status_code == 502 and "clé API" in r.json()["detail"]
